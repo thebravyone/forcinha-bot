@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -6,10 +7,11 @@ from nanoid import generate
 
 AWS_REGION = os.environ.get("AWS_REGION", "")
 
-db = boto3.resource("dynamodb", region_name=AWS_REGION)
+dynamo_client = boto3.resource("dynamodb", region_name=AWS_REGION)
+state_token_table = dynamo_client.Table("forcinha_state-token")
 
-state_token_table = db.Table("forcinha_state-token")
-user_table = db.Table("forcinha_user")
+s3_client = boto3.resource("s3", region_name=AWS_REGION)
+bucket = s3_client.Bucket("forcinha-bot")
 
 
 class state_token:
@@ -31,29 +33,20 @@ class state_token:
         return response.get("Item", None)
 
 
-class user:
-    def add(discord_user_id: str, character_id: str):
-        user_table.put_item(
-            Item={
-                "discord_user_id": discord_user_id,
-                "character_id": character_id,
-            }
-        )
+class users:
+    def get_all():
+        body = bucket.Object(f"users.json").get()["Body"].read()
+        return json.loads(body)
+
+    def get(discord_user_id: int | str):
+        user_data = users.get_all()
+        return user_data.get(str(discord_user_id), None)
+
+    def add(discord_user_id: int | str, character_id: int | str):
+        user_data = users.get_all()
+        user_data[str(discord_user_id)] = {
+            "character_id": str(character_id),
+            "updated_at": datetime.now().isoformat(),
+        }
+        bucket.Object(f"users.json").put(Body=json.dumps(user_data))
         return
-
-    def get(discord_user_id: str):
-        response = user_table.get_item(Key={"discord_user_id": discord_user_id})
-        return response.get("Item", None)
-
-    def get_many(discord_user_ids: list[str]):
-        keys = [{"discord_user_id": id} for id in discord_user_ids]
-
-        keys_batch = [keys[i : i + 100] for i in range(0, len(keys), 100)]
-
-        items = []
-        for keys in keys_batch:
-            response = user_table.batch_get_item(Keys=keys)
-            items.extend(response.get("Items", []))
-
-        response = user_table.batch_get_item(Keys=keys)
-        return response.get("Items", None)
