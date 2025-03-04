@@ -14,7 +14,7 @@ user_table = db.Table("forcinha_user")
 
 class state_token:
     @staticmethod
-    def add(discord_user_id: str) -> str:
+    def add(discord_user_id: int) -> str:
         token = generate(size=16)
         state_token_table.put_item(
             Item={
@@ -35,16 +35,16 @@ class state_token:
 
 class user:
     @staticmethod
-    def add(discord_user_id: str, character_id: str):
+    def add(discord_user_id: int, character_id: int):
         user_table.put_item(
             Item={
                 "discord_user_id": discord_user_id,
-                "eve_character_id": character_id,
+                "character_id": character_id,
             }
         )
         return
 
     @staticmethod
-    def get(discord_user_id: str):
+    def get(discord_user_id: int):
         response = user_table.get_item(Key={"discord_user_id": discord_user_id})
         return response.get("Item", None)
