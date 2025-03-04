@@ -54,18 +54,19 @@ def command_link_account(command: dict):
     discord_user_id = command["user"]["id"]  # only works for DMs
     state_token = db.state_token.add(discord_user_id)
 
-    base_url = "https://login.eveonline.com/v2/oauth/authorize"
-    params = {
-        "response_type": "code",
-        "client_id": CLIENT_ID,
-        "redirect_uri": SSO_CALLBACK_URL,
-        "scope": "publicData",
-        "state": state_token,
-    }
+    query_string = urllib.parse.urlencode(
+        {
+            "response_type": "code",
+            "client_id": CLIENT_ID,
+            "redirect_uri": SSO_CALLBACK_URL,
+            "scope": "publicData",
+            "state": state_token,
+        }
+    )
 
-    auth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+    auth_url = f"https://login.eveonline.com/v2/oauth/authorize?{query_string}"
 
-    content = f"Clique no botão abaixo para vincular sua conta:"
+    content = f"🍻 Seja bem-vindo ao discord das Forças Armadas!\n\nPara ter acesso aos canais internos é necessário vincular sua conta do EVE Online."
     components = [
         {
             "type": 1,
