@@ -45,7 +45,7 @@ def verify_signature(event: dict):
         verify_key = VerifyKey(bytes.fromhex(PUBLIC_KEY))
         verify_key.verify(f"{timestamp}{body}".encode(), bytes.fromhex(signature))
         return True
-    except BadSignatureError:
+    except:
         return False
 
 
