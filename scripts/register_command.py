@@ -1,4 +1,3 @@
-import json
 import os
 
 import httpx
@@ -14,6 +13,7 @@ commands = [
         "name": "vincular",
         "type": 1,
         "description": "Vincule sua conta do EVE-Online ao Discord",
+        "contexts": [1],  # DM Only
     },
 ]
 
