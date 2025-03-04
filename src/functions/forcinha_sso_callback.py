@@ -32,7 +32,7 @@ def lambda_handler(event, context):
     discord_user_id = db.state_token.get(state_token)["discord_user_id"]
     character_id = public_data["CharacterID"]
 
-    db.user.add(discord_user_id, character_id)
+    db.users.add(discord_user_id, character_id)
     return {"statusCode": 200, "body": "OK"}
 
 
