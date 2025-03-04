@@ -1,0 +1,12 @@
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  forcinhaDefault:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Layer ${ResourceName}
+        - ResourceName: forcinhaDefault
+      ContentUri: src/layer/
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.13
