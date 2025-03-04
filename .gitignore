@@ -176,3 +176,6 @@ cython_debug/
 # AWS Sam CLI
 .aws-sam/
 .zip/
+
+# Dev
+/index.py
