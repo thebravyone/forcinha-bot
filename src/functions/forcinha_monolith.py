@@ -1,6 +1,8 @@
 import json
 import os
+import urllib.parse
 
+import db
 import httpx
 from nacl.signing import VerifyKey
 
@@ -9,26 +11,6 @@ USER_AGENT = os.environ.get("USER_AGENT", None)
 
 CLIENT_ID = os.environ.get("CLIENT_ID", None)
 SSO_CALLBACK_URL = os.environ.get("CALLBACK_URL", None)
-
-commands = [
-    {
-        "name": "vincular",
-        "content": "Vincule sua conta do EVE-Online ao Discord",
-        "components": [
-            {
-                "type": 1,
-                "components": [
-                    {
-                        "type": 2,
-                        "style": 5,
-                        "label": "Log in with EVE Online",
-                        "url": "",
-                    }
-                ],
-            }
-        ],
-    }
-]
 
 
 def lambda_handler(event, context):
@@ -40,7 +22,7 @@ def lambda_handler(event, context):
     if method != "POST":
         return {"statusCode": 405, "body": "Method Not Allowed"}
 
-    if not verify_signature(event):
+    if not debug and not verify_signature(event):
         return {"statusCode": 401, "body": "Unauthorized"}
 
     body = json.loads(event.get("body", "{}"))
@@ -50,7 +32,9 @@ def lambda_handler(event, context):
         return process_ping()
 
     if interaction_type == 2:  # Command
-        return process_command(body)
+        command_name = body["data"]["name"]
+        if command_name == "vincular":
+            return command_link_account(body)
 
     return {
         "statusCode": 400,
@@ -58,7 +42,51 @@ def lambda_handler(event, context):
     }
 
 
-def verify_signature(event: dict):
+def process_ping():
+    return {
+        "statusCode": 200,
+        "headers": {"User-Agent": USER_AGENT, "Content-Type": "application/json"},
+        "body": json.dumps({"type": 1}),
+    }
+
+
+def command_link_account(command: dict):
+    discord_user_id = command["user"]["id"]  # only works for DMs
+    state_token = db.state_token.add(discord_user_id)
+
+    base_url = "https://login.eveonline.com/v2/oauth/authorize"
+    params = {
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": SSO_CALLBACK_URL,
+        "scope": "publicData",
+        "state": state_token,
+    }
+
+    auth_url = f"{base_url}?{urllib.parse.urlencode(params)}"
+
+    content = f"Clique no botão abaixo para vincular sua conta:"
+    components = [
+        {
+            "type": 1,
+            "components": [
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Log in with EVE Online",
+                    "url": auth_url,
+                }
+            ],
+        }
+    ]
+
+    message_url = interaction_callback_url(command)
+    send_message(message_url, content, components)
+
+    return {"statusCode": 202}
+
+
+def verify_signature(event: dict) -> bool:
     signature = event.get("headers", {}).get("x-signature-ed25519", "")
     timestamp = event.get("headers", {}).get("x-signature-timestamp", "")
     body = event.get("body", "")
@@ -71,49 +99,18 @@ def verify_signature(event: dict):
         return False
 
 
-def process_ping():
-    return {
-        "statusCode": 200,
-        "headers": {"User-Agent": USER_AGENT, "Content-Type": "application/json"},
-        "body": json.dumps({"type": 1}),
-    }
+def debug(event: dict) -> bool:
+    secret = event.get("headers", {}).get("x-debug-secret", "")
+    debug_secret = os.environ.get("DEBUG_SECRET", None)
+
+    if debug_secret is None:
+        return False
+
+    return secret == debug_secret
 
 
-def process_command(body: dict):
-    interaction_id = body["id"]
-    interaction_token = body["token"]
-    command_name = body["data"]["name"]
-
-    callback_url = f"https://discord.com/api/v10/interactions/{interaction_id}/{interaction_token}/callback"
-
-    if command_name == "vincular":
-        link_account(callback_url)
-        return {"statusCode": 202}
-
-    return {"statusCode": 400, "body": "Bad Request"}
-
-
-def link_account(callback_url: str):
-    state_token = "dummy"  # TODO implement
-    eve_auth_url = f"https://login.eveonline.com/v2/oauth/authorize?response_type=code&client_id={CLIENT_ID}&redirect_uri={SSO_CALLBACK_URL}&scope=publicData&state={state_token}"
-
-    content = f"Clique no botão abaixo para vincular sua conta:"
-    components = [
-        {
-            "type": 1,
-            "components": [
-                {
-                    "type": 2,
-                    "style": 5,
-                    "label": "Log in with EVE Online",
-                    "url": eve_auth_url,
-                }
-            ],
-        }
-    ]
-
-    send_message(callback_url, content, components)
-    return
+def interaction_callback_url(data: dict) -> str:
+    return f"https://discord.com/api/v10/interactions/{data['id']}/{data['token']}/callback"
 
 
 def send_message(url: str, content: str, components: dict = {}):
