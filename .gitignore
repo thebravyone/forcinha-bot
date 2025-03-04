@@ -131,3 +131,4 @@ dist
 
 # AWS Sam CLI
 .aws-sam/
+.zip/
