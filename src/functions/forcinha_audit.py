@@ -12,7 +12,7 @@ GUILD_ID = os.environ.get("GUILD_ID", None)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", None)
 
 CLIENT_ID = os.environ.get("CLIENT_ID", None)
-SSO_CALLBACK_URL = os.environ.get("CALLBACK_URL", None)
+SSO_CALLBACK_URL = os.environ.get("SSO_CALLBACK_URL", None)
 
 CORP_ID = 98028546
 FRIENDLY_ALLIANCES_IDS = [
