@@ -104,31 +104,65 @@ def command_audit(command: dict):
         },
     )
 
-    response = httpx.get(
-        "https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/"
-    )
-    response.raise_for_status()
-    results = response.json()
+    try:
+        response = httpx.get(
+            "https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/",
+            timeout=60 * 5,  # 5 minutes
+        )
+        response.raise_for_status()
+        results = response.json()
+    except Exception as e:
+        print(e)
+        return {"statusCode": 500}
 
     content = f"🔍  {results["audited_count"]} Membros Auditados\n"
 
-    embeds = [
-        {
-            "title": f"{len(results["roles_added"])}  Roles Adicionadas",
-            "description": "\n".join(results["roles_added"]),
-            "color": 0x22C55E,
-        },
-        {
-            "title": f"{len(results["roles_removed"])}  Roles Removidas",
-            "description": "\n".join(results["roles_removed"]),
-            "color": 0xDC2626,
-        },
-        {
-            "title": f"{len(results["dm_sent"])}  DMs enviadas para membros não registrados",
-            "description": "\n".join(results["dm_sent"]),
-            "color": 0x71717A,
-        },
-    ]
+    total_issues = (
+        len(results["nicks_updated"])
+        + len(results["roles_added"])
+        + len(results["roles_removed"])
+        + len(results["dm_sent"])
+    )
+
+    if total_issues == 0:
+        content += f"\n✅  Nenhum problema encontrado!"
+
+    embeds = []
+    if len(results["nicks_updated"]) > 0:
+        embeds.append(
+            {
+                "title": f"{len(results['nicks_updated'])}  Nicknames Atualizados",
+                "description": "\n".join(results["nicks_updated"]),
+                "color": 0x0EA5E9,
+            }
+        )
+
+    if len(results["roles_added"]) > 0:
+        embeds.append(
+            {
+                "title": f"{len(results['roles_added'])}  Roles Adicionadas",
+                "description": "\n".join(results["roles_added"]),
+                "color": 0x22C55E,
+            }
+        )
+
+    if len(results["roles_removed"]) > 0:
+        embeds.append(
+            {
+                "title": f"{len(results['roles_removed'])}  Roles Removidas",
+                "description": "\n".join(results["roles_removed"]),
+                "color": 0xDC2626,
+            }
+        )
+
+    if len(results["dm_sent"]) > 0:
+        embeds.append(
+            {
+                "title": f"{len(results['dm_sent'])}  DMs enviadas para membros não registrados",
+                "description": "\n".join(results["dm_sent"]),
+                "color": 0x71717A,
+            }
+        )
 
     response = httpx.patch(
         f"https://discord.com/api/v10/webhooks/{APP_ID}/{command["token"]}/messages/@original",
