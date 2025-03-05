@@ -4,12 +4,13 @@ import os
 import db
 import httpx
 
+BOT_TOKEN = os.environ.get("BOT_TOKEN", None)
+
 CLIENT_ID = os.environ.get("CLIENT_ID", None)
 CLIENT_SECRET = os.environ.get("CLIENT_SECRET", None)
 
 
 def lambda_handler(event, context):
-
     if CLIENT_ID is None or CLIENT_SECRET is None:
         return {"statusCode": 500, "body": "Internal Server Error"}
 
@@ -33,7 +34,8 @@ def lambda_handler(event, context):
     character_id = public_data["CharacterID"]
 
     db.users.add(discord_user_id, character_id)
-    send_confirmation_dm()
+    send_confirmation_dm(discord_user_id)
+    force_audit()
 
     return show_confirmation_page()
 
@@ -74,7 +76,50 @@ def get_public_data(access_token: str):
     return data
 
 
-def send_confirmation_dm():
+def force_audit():
+    httpx.get("https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/")
+
+
+def send_confirmation_dm(discord_user_id):
+    headers = {"Authorization": f"Bot {BOT_TOKEN}", "Content-Type": "application/json"}
+    response = httpx.post(
+        "https://discord.com/api/v10/users/@me/channels",
+        headers=headers,
+        json={"recipient_id": discord_user_id},
+    )
+
+    response.raise_for_status()
+    channel_id = response.json()["id"]
+
+    content = f"✅  Conta vinculada com sucesso!\n\n Se você for um membro da FORCA ou gostaria de ser recrutado, cadastre-se na Aliança e Coalizão utilizando ambos os botões abaixo:"
+    components = [
+        {
+            "type": 1,
+            "components": [
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Brave Core Services",
+                    "url": "https://account.bravecollective.com/",
+                },
+                {
+                    "type": 2,
+                    "style": 5,
+                    "label": "Goonfleet.com",
+                    "url": "https://gice.goonfleet.com/",
+                },
+            ],
+        }
+    ]
+
+    httpx.post(
+        f"https://discord.com/api/v10/channels/{channel_id}/messages",
+        headers=headers,
+        json={
+            "content": content,
+            "components": components,
+        },
+    )
     return
 
 
