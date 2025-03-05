@@ -47,6 +47,7 @@ def lambda_handler(event, context):
         {
             "discord_user_id": user["user"]["id"],
             "discord_user_name": get_discord_member_name(user),
+            "discord_nick_name": user["nick"],
             "character_id": registered_members.get(user["user"]["id"], {}).get(
                 "character_id", None
             ),
@@ -71,40 +72,21 @@ def lambda_handler(event, context):
         and not user["user"].get("bot", False)
     ]
 
-    audit_results = audit_and_fix_roles(audit_targets)
-    dm_results = dm_unregistered_users(dm_targets)
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps(
-            {
-                "audited_count": len(audit_targets),
-                "roles_added": audit_results["roles_added"],
-                "roles_removed": audit_results["roles_removed"],
-                "dm_sent": dm_results,
-            }
-        ),
-    }
-
-
-def audit_and_fix_roles(audit_targets: dict):
     # Fetch public data in bulk
-    eve_public_data = get_batch_public_data(
+    eve_public_data = get_batch_char_public_data(
         [user["character_id"] for user in audit_targets if user["character_id"]]
     )
 
-    # Convert eve_public_data into a dictionary for O(1) lookup by Character ID
-    public_data_map = {data["character_id"]: data for data in eve_public_data}
-
-    # Create enriched registered users list
-    audited_users = []
+    auditees = []
     for user in audit_targets:
-        public_data = public_data_map.get(user["character_id"], {})
-        audited_users.append(
+        public_data = eve_public_data.get(user["character_id"], {})
+        auditees.append(
             {
                 "discord_user_id": user["discord_user_id"],
                 "discord_user_name": user["discord_user_name"],
+                "discord_nick_name": user["discord_nick_name"],
                 "character_id": user.get("character_id", None),
+                "character_name": public_data.get("name", None),
                 "corporation_id": public_data.get("corporation_id", None),
                 "alliance_id": public_data.get("alliance_id", None),
                 "current_roles": user["current_roles"],
@@ -112,8 +94,31 @@ def audit_and_fix_roles(audit_targets: dict):
             }
         )
 
+    # audit nicknames
+    nick_audit_results = audit_nicknames(auditees)
+    auditees = nick_audit_results["auditees"]
+
+    # audit roles and registration
+    role_audit_results = audit_and_fix_roles(auditees)
+    dm_results = dm_unregistered_users(dm_targets)
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps(
+            {
+                "audited_count": len(audit_targets),
+                "nicks_updated": nick_audit_results["nicks_updated"],
+                "roles_added": role_audit_results["roles_added"],
+                "roles_removed": role_audit_results["roles_removed"],
+                "dm_sent": dm_results,
+            }
+        ),
+    }
+
+
+def audit_and_fix_roles(audit_targets: dict):
     # Determine target roles
-    for user in audited_users:
+    for user in audit_targets:
         if user["corporation_id"] == CORP_ID:
             user["target_roles"].add(ROLES["Membro"])
         elif user["alliance_id"] in FRIENDLY_ALLIANCES_IDS:
@@ -123,7 +128,7 @@ def audit_and_fix_roles(audit_targets: dict):
     headers = {"Authorization": f"Bot {BOT_TOKEN}"}
 
     # Process role updates
-    for user in audited_users:
+    for user in audit_targets:
         discord_user_id = user["discord_user_id"]
 
         # Add missing roles
@@ -153,6 +158,53 @@ def audit_and_fix_roles(audit_targets: dict):
     return {
         "roles_added": roles_added,
         "roles_removed": roles_removed,
+    }
+
+
+def audit_nicknames(audit_targets: dict):
+    headers = {"Authorization": f"Bot {BOT_TOKEN}", "Content-Type": "application/json"}
+
+    corporation_ids = set()
+    for user in audit_targets:
+        corporation_ids.add(user["corporation_id"])
+
+    corporation_data = get_batch_corp_public_data(list(corporation_ids))
+
+    nicks_updated = []
+    for user in audit_targets:
+        corporation_id = user["corporation_id"]
+        corporation_ticker = corporation_data.get(corporation_id, {}).get(
+            "ticker", None
+        )
+
+        target_nickname = None
+
+        if user["character_name"]:
+            target_nickname = user["character_name"]
+
+        if corporation_ticker and corporation_id != CORP_ID:
+            target_nickname = f"[{corporation_ticker}] {user['character_name']}"
+
+        if target_nickname != user["discord_nick_name"]:
+            try:
+                response = httpx.patch(
+                    f"https://discord.com/api/v10/guilds/{GUILD_ID}/members/{user['discord_user_id']}",
+                    headers=headers,
+                    json={"nick": target_nickname},
+                )
+                response.raise_for_status()
+                nicks_updated.append(
+                    f"Nickname de '{user['discord_user_name']}' atualizado para '{target_nickname}'"
+                )
+                user["discord_user_name"] = target_nickname
+            except:
+                nicks_updated.append(
+                    f"Falha ao atualizar o nickname de '{user['discord_user_name']}'"
+                )
+
+    return {
+        "auditees": audit_targets,
+        "nicks_updated": nicks_updated,
     }
 
 
@@ -245,7 +297,7 @@ def get_registered_members() -> list:
     return db.users.get_all()
 
 
-def get_batch_public_data(character_ids: list[int]) -> list:
+def get_batch_char_public_data(character_ids: list[int]) -> list:
     async def fetch_character_data():
         semaphore = asyncio.Semaphore(25)  # Limit to 25 concurrent requests
 
@@ -265,7 +317,34 @@ def get_batch_public_data(character_ids: list[int]) -> list:
         return responses
 
     public_data = asyncio.run(fetch_character_data())
-    return public_data
+    return {data["character_id"]: data for data in public_data}
+
+
+def get_batch_corp_public_data(corporation_ids: list[int]) -> list:
+    async def fetch_corporation_data():
+        semaphore = asyncio.Semaphore(25)  # Limit to 25 concurrent requests
+
+        @stamina.retry(on=_is_retriable_error, attempts=3)
+        async def fetch(corporation_id):
+            async with semaphore:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"https://esi.evetech.net/latest/corporations/{corporation_id}/",
+                        timeout=10,
+                    )
+                    response.raise_for_status()
+                    return {"corporation_id": corporation_id, **response.json()}
+
+        tasks = [
+            fetch(corporation_id)
+            for corporation_id in corporation_ids
+            if corporation_id is not None
+        ]
+        responses = await asyncio.gather(*tasks)
+        return responses
+
+    corporation_data = asyncio.run(fetch_corporation_data())
+    return {data["corporation_id"]: data for data in corporation_data}
 
 
 def get_key_from_value(dictionary, target_value):
