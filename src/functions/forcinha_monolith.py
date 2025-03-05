@@ -6,6 +6,7 @@ import db
 import httpx
 from nacl.signing import VerifyKey
 
+APP_ID = os.environ.get("APP_ID", None)
 PUBLIC_KEY = os.environ.get("PUBLIC_KEY", None)
 USER_AGENT = os.environ.get("USER_AGENT", None)
 
@@ -92,7 +93,16 @@ def command_link_account(command: dict):
 
 
 def command_audit(command: dict):
+
     message_url = interaction_callback_url(command)
+
+    httpx.post(
+        message_url,
+        headers={"User-Agent": USER_AGENT},
+        json={
+            "type": 5,  # ACK with source
+        },
+    )
 
     response = httpx.get(
         "https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/"
@@ -120,18 +130,17 @@ def command_audit(command: dict):
         },
     ]
 
-    httpx.post(
-        message_url,
+    response = httpx.patch(
+        f"https://discord.com/api/v10/webhooks/{APP_ID}/{command["token"]}/messages/@original",
         headers={"User-Agent": USER_AGENT},
         json={
-            "type": 4,
-            "data": {
-                "content": content,
-                "embeds": embeds,
-            },
+            "content": content,
+            "embeds": embeds,
         },
     )
-    send_message(message_url, f"🔍 Audit complete! {results}", embeds)
+
+    response.raise_for_status()
+
     return {"statusCode": 202}
 
 
