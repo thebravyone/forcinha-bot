@@ -66,7 +66,7 @@ def command_link_account(command: dict):
 
     auth_url = f"https://login.eveonline.com/v2/oauth/authorize?{query_string}"
 
-    content = f"🍻 Seja bem-vindo ao discord das Forças Armadas!\n\nPara ter acesso aos canais internos é necessário vincular sua conta do EVE Online."
+    content = f"Clique no botão abaixo para vincular sua conta do EVE Online e ter acesso aos canais internos."
     components = [
         {
             "type": 1,
