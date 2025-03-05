@@ -174,7 +174,7 @@ def show_confirmation_page():
             </div>
             <div class="text">
                 <h1>#SUCESSO</h1>
-                Você já pode fechar essa página ✅
+                Você já pode fechar esta página ✅
             </div>
         </div>
     </body>
