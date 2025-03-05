@@ -38,15 +38,16 @@ class users:
         body = bucket.Object(f"users.json").get()["Body"].read()
         return json.loads(body)
 
-    def get(discord_user_id: int | str):
+    def get(discord_user_id):
         user_data = users.get_all()
         return user_data.get(str(discord_user_id), None)
 
-    def add(discord_user_id: int | str, character_id: int | str):
+    def add(discord_user_id, character_id=None):
         user_data = users.get_all()
         user_data[str(discord_user_id)] = {
-            "character_id": str(character_id),
+            "character_id": character_id,
             "updated_at": datetime.now().isoformat(),
         }
+
         bucket.Object(f"users.json").put(Body=json.dumps(user_data))
         return
