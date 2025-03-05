@@ -196,7 +196,8 @@ def audit_nicknames(audit_targets: dict):
                 nicks_updated.append(
                     f"Nickname de '{user['discord_user_name']}' atualizado para '{target_nickname}'"
                 )
-                user["discord_user_name"] = target_nickname
+                if target_nickname is not None:
+                    user["discord_user_name"] = target_nickname
             except:
                 nicks_updated.append(
                     f"Falha ao atualizar o nickname de '{user['discord_user_name']}'"
@@ -254,20 +255,26 @@ def dm_unregistered_users(dm_targets: list):
             }
         ]
 
-        response = httpx.post(
-            f"https://discord.com/api/v10/channels/{channel_id}/messages",
-            headers=headers,
-            json={
-                "content": content,
-                "components": components,
-            },
-        )
-
-        response.raise_for_status()
-        db.users.add(discord_user_id=user["discord_user_id"])
-        dm_sent.append(
-            f"DM enviada para '{user["discord_user_name"]}' com instruções de registro"
-        )
+        try:
+            response = httpx.post(
+                f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                headers=headers,
+                json={
+                    "content": content,
+                    "components": components,
+                },
+            )
+            response.raise_for_status()
+            db.users.add(discord_user_id=user["discord_user_id"])
+            dm_sent.append(
+                f"DM enviada para '{user["discord_user_name"]}' com instruções de registro"
+            )
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 403:
+                db.users.add(discord_user_id=user["discord_user_id"])
+                dm_sent.append(
+                    f"Falha ao enviar DM para '{user["discord_user_name"]}' (Permissão negada)"
+                )
 
     return dm_sent
 
