@@ -15,16 +15,16 @@ SSO_CALLBACK_URL = os.environ.get("CALLBACK_URL", None)
 
 
 def lambda_handler(event, context):
-    if PUBLIC_KEY is None or USER_AGENT is None or CLIENT_ID is None:
-        return {"statusCode": 500, "body": "Internal Server Error"}
+    if not verify_signature(event):
+        return {"statusCode": 401, "body": "Unauthorized"}
 
     method = event.get("requestContext", {}).get("http", {}).get("method", "")
 
     if method != "POST":
         return {"statusCode": 405, "body": "Method Not Allowed"}
 
-    if not _debug and not verify_signature(event):
-        return {"statusCode": 401, "body": "Unauthorized"}
+    if PUBLIC_KEY is None or USER_AGENT is None or CLIENT_ID is None:
+        return {"statusCode": 500, "body": "Internal Server Error"}
 
     body = json.loads(event.get("body", "{}"))
     interaction_type = body.get("type", 0)
@@ -121,7 +121,7 @@ def command_audit(command: dict):
         len(results["nicks_updated"])
         + len(results["roles_added"])
         + len(results["roles_removed"])
-        + len(results["dm_sent"])
+        # + len(results["dm_sent"])
     )
 
     if total_issues == 0:
@@ -155,14 +155,14 @@ def command_audit(command: dict):
             }
         )
 
-    if len(results["dm_sent"]) > 0:
-        embeds.append(
-            {
-                "title": f"{len(results['dm_sent'])}  DMs enviadas para membros não registrados",
-                "description": "\n".join(results["dm_sent"]),
-                "color": 0x71717A,
-            }
-        )
+    # if len(results["dm_sent"]) > 0:
+    #     embeds.append(
+    #         {
+    #             "title": f"{len(results['dm_sent'])}  DMs enviadas para membros não registrados",
+    #             "description": "\n".join(results["dm_sent"]),
+    #             "color": 0x71717A,
+    #         }
+    #     )
 
     response = httpx.patch(
         f"https://discord.com/api/v10/webhooks/{APP_ID}/{command["token"]}/messages/@original",

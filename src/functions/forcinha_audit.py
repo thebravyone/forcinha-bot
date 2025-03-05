@@ -100,7 +100,7 @@ def lambda_handler(event, context):
 
     # audit roles and registration
     role_audit_results = audit_and_fix_roles(auditees)
-    dm_results = dm_unregistered_users(dm_targets)
+    # dm_results = dm_unregistered_users(dm_targets)
 
     return {
         "statusCode": 200,
@@ -110,7 +110,7 @@ def lambda_handler(event, context):
                 "nicks_updated": nick_audit_results["nicks_updated"],
                 "roles_added": role_audit_results["roles_added"],
                 "roles_removed": role_audit_results["roles_removed"],
-                "dm_sent": dm_results,
+                # "dm_sent": dm_results,
             }
         ),
     }
@@ -218,11 +218,16 @@ def dm_unregistered_users(dm_targets: list):
 
     dm_sent = []
     for user in dm_targets:
+
         response = httpx.post(
             "https://discord.com/api/v10/users/@me/channels",
             headers=headers,
             json={"recipient_id": user["discord_user_id"]},
         )
+
+        if response.status_code != 200:
+            print(response.headers)
+            continue
 
         response.raise_for_status()
         channel_id = response.json()["id"]
