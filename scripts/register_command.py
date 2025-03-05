@@ -15,6 +15,12 @@ commands = [
         "description": "Vincule sua conta do EVE-Online ao Discord",
         "contexts": [1],  # DM Only
     },
+    {
+        "name": "auditar",
+        "type": 1,
+        "description": "Auditar roles e o vínculo de contas do EVE-Online",
+        "contexts": [0],
+    },
 ]
 
 

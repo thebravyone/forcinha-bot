@@ -22,7 +22,7 @@ def lambda_handler(event, context):
     if method != "POST":
         return {"statusCode": 405, "body": "Method Not Allowed"}
 
-    if not debug and not verify_signature(event):
+    if not _debug and not verify_signature(event):
         return {"statusCode": 401, "body": "Unauthorized"}
 
     body = json.loads(event.get("body", "{}"))
@@ -33,8 +33,12 @@ def lambda_handler(event, context):
 
     if interaction_type == 2:  # Command
         command_name = body["data"]["name"]
+
         if command_name == "vincular":
             return command_link_account(body)
+
+        if command_name == "auditar":
+            return command_audit(body)
 
     return {
         "statusCode": 400,
@@ -87,6 +91,50 @@ def command_link_account(command: dict):
     return {"statusCode": 202}
 
 
+def command_audit(command: dict):
+    message_url = interaction_callback_url(command)
+
+    response = httpx.get(
+        "https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/"
+    )
+    response.raise_for_status()
+    results = response.json()
+
+    content = f"🔍  {results["audited_count"]} Membros Auditados\n"
+
+    embeds = [
+        {
+            "title": f"{len(results["roles_added"])}  Roles Adicionadas",
+            "description": "\n".join(results["roles_added"]),
+            "color": 0x22C55E,
+        },
+        {
+            "title": f"{len(results["roles_removed"])}  Roles Removidas",
+            "description": "\n".join(results["roles_removed"]),
+            "color": 0xDC2626,
+        },
+        {
+            "title": f"{len(results["dm_sent"])}  DMs enviadas para membros não registrados",
+            "description": "\n".join(results["dm_sent"]),
+            "color": 0x71717A,
+        },
+    ]
+
+    httpx.post(
+        message_url,
+        headers={"User-Agent": USER_AGENT},
+        json={
+            "type": 4,
+            "data": {
+                "content": content,
+                "embeds": embeds,
+            },
+        },
+    )
+    send_message(message_url, f"🔍 Audit complete! {results}", embeds)
+    return {"statusCode": 202}
+
+
 def verify_signature(event: dict) -> bool:
     signature = event.get("headers", {}).get("x-signature-ed25519", "")
     timestamp = event.get("headers", {}).get("x-signature-timestamp", "")
@@ -100,7 +148,7 @@ def verify_signature(event: dict) -> bool:
         return False
 
 
-def debug(event: dict) -> bool:
+def _debug(event: dict) -> bool:
     secret = event.get("headers", {}).get("x-debug-secret", "")
     debug_secret = os.environ.get("DEBUG_SECRET", None)
 
