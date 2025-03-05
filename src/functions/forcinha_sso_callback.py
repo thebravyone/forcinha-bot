@@ -77,7 +77,13 @@ def get_public_data(access_token: str):
 
 
 def force_audit():
-    httpx.get("https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/")
+    try:
+        httpx.get(
+            "https://r2zrcqmbzurqzwewqpeqsnfpoy0skysk.lambda-url.us-east-1.on.aws/",
+            timeout=0.2,  # fire and forget
+        )
+    except:
+        pass
 
 
 def send_confirmation_dm(discord_user_id):
@@ -91,7 +97,7 @@ def send_confirmation_dm(discord_user_id):
     response.raise_for_status()
     channel_id = response.json()["id"]
 
-    content = f"✅  Conta vinculada com sucesso!\n\n Se você for um membro da FORCA ou gostaria de ser recrutado, cadastre-se na Aliança e Coalizão utilizando ambos os botões abaixo:"
+    content = f"✅  Sua conta do EVE Online foi vinculada ao discord com sucesso!\n\nAgora cadastre-se na Aliança e na Coalizão utilizando os botões abaixo:"
     components = [
         {
             "type": 1,
@@ -112,14 +118,19 @@ def send_confirmation_dm(discord_user_id):
         }
     ]
 
-    httpx.post(
-        f"https://discord.com/api/v10/channels/{channel_id}/messages",
-        headers=headers,
-        json={
-            "content": content,
-            "components": components,
-        },
-    )
+    try:
+        httpx.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers=headers,
+            json={
+                "content": content,
+                "components": components,
+            },
+            timeout=0.2,  # fire and forget
+        )
+    except:
+        pass
+
     return
 
 
@@ -162,9 +173,7 @@ def show_confirmation_page():
                 <img src="https://forcinha-bot-publico.s3.us-east-1.amazonaws.com/bender_shooting.gif" alt="PVP GIF">
             </div>
             <div class="text">
-                <h1>#PartiuPVP</h1>
-                Conta vinculada com sucesso!
-                <br>
+                <h1>#SUCESSO</h1>
                 Você já pode fechar essa página ✅
             </div>
         </div>
@@ -190,5 +199,4 @@ if __name__ == "__main__":
         },
         None,
     )
-    print(response)
     pass
