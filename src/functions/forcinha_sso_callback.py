@@ -33,7 +33,9 @@ def lambda_handler(event, context):
     character_id = public_data["CharacterID"]
 
     db.users.add(discord_user_id, character_id)
-    return {"statusCode": 200, "body": "OK"}
+    send_confirmation_dm()
+
+    return show_confirmation_page()
 
 
 def request_token(authorization_code: str):
@@ -70,6 +72,66 @@ def get_public_data(access_token: str):
 
     data = response.json()
     return data
+
+
+def send_confirmation_dm():
+    return
+
+
+def show_confirmation_page():
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>ForcinhaBot</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                background-color: #1a1a1a;
+                color: white;
+                margin: 0;
+            }
+            .container {
+                display: flex;
+                align-items: center;
+                gap: 36px;
+            }
+            .text {
+                font-size: 18px;
+            }
+            .gif img {
+                width: 320px;
+                height: auto;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="gif">
+                <img src="https://forcinha-bot-publico.s3.us-east-1.amazonaws.com/bender_shooting.gif" alt="PVP GIF">
+            </div>
+            <div class="text">
+                <h1>#PartiuPVP</h1>
+                Conta vinculada com sucesso!
+                <br>
+                Você já pode fechar essa página ✅
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "text/html"},
+        "body": html_content,
+    }
 
 
 if __name__ == "__main__":
