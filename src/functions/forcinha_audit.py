@@ -1,5 +1,8 @@
 import asyncio
+import json
 import os
+import urllib
+from datetime import datetime
 
 import db
 import httpx
@@ -7,6 +10,9 @@ import stamina
 
 GUILD_ID = os.environ.get("GUILD_ID", None)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", None)
+
+CLIENT_ID = os.environ.get("CLIENT_ID", None)
+SSO_CALLBACK_URL = os.environ.get("CALLBACK_URL", None)
 
 CORP_ID = 98028546
 FRIENDLY_ALLIANCES_IDS = [
@@ -34,50 +40,80 @@ def lambda_handler(event, context):
     if GUILD_ID is None or BOT_TOKEN is None:
         return {"statusCode": 500, "body": "Internal Server Error"}
 
-    members = get_member_list()  # Fetch all server members
-    registered_users = get_registered_users()  # Fetch registered users
+    discord_members = get_discord_members()  # Fetch all server members
+    registered_members = get_registered_members()  # Fetch registered users
 
-    # Convert members to a dictionary for O(1) lookup by Discord user ID
-    members_map = {member["user"]["id"]: member for member in members}
-
-    # Filter registered users to only those who are in the Discord server
-    registered_users = [
-        user for user in registered_users if user["discord_user_id"] in members_map
+    audit_targets = [
+        {
+            "discord_user_id": user["user"]["id"],
+            "discord_user_name": get_discord_member_name(user),
+            "character_id": registered_members.get(user["user"]["id"], {}).get(
+                "character_id", None
+            ),
+            "current_roles": set(
+                int(role_id)
+                for role_id in user["roles"]
+                if int(role_id) in ROLES.values()
+            ),
+        }
+        for user in discord_members
+        if not user["user"].get("bot", False)
     ]
 
+    dm_targets = [
+        {
+            "discord_user_id": user["user"]["id"],
+            "discord_user_name": get_discord_member_name(user),
+            "joined_at": datetime.fromisoformat(user["joined_at"]),
+        }
+        for user in discord_members
+        if user["user"]["id"] not in registered_members
+        and not user["user"].get("bot", False)
+    ]
+
+    audit_results = audit_and_fix_roles(audit_targets)
+    dm_results = dm_unregistered_users(dm_targets)
+
+    return {
+        "statusCode": 200,
+        "body": json.dumps(
+            {
+                "audited_count": len(audit_targets),
+                "roles_added": audit_results["roles_added"],
+                "roles_removed": audit_results["roles_removed"],
+                "dm_sent": dm_results,
+            }
+        ),
+    }
+
+
+def audit_and_fix_roles(audit_targets: dict):
     # Fetch public data in bulk
-    character_ids = [
-        user["character_id"] for user in registered_users if user["character_id"]
-    ]
-    eve_public_data = get_batch_public_data(character_ids)
+    eve_public_data = get_batch_public_data(
+        [user["character_id"] for user in audit_targets if user["character_id"]]
+    )
 
     # Convert eve_public_data into a dictionary for O(1) lookup by Character ID
     public_data_map = {data["character_id"]: data for data in eve_public_data}
 
     # Create enriched registered users list
-    composite_users = []
-    for user in registered_users:
-        public_data = public_data_map.get(user["character_id"])
-        if not public_data:
-            continue
-
-        member = members_map[user["discord_user_id"]]
-        composite_users.append(
+    audited_users = []
+    for user in audit_targets:
+        public_data = public_data_map.get(user["character_id"], {})
+        audited_users.append(
             {
                 "discord_user_id": user["discord_user_id"],
-                "character_id": user["character_id"],
-                "character_name": public_data["name"],
-                "corporation_id": public_data["corporation_id"],
-                "alliance_id": public_data["alliance_id"],
-                "current_roles": set(
-                    int(role_id) for role_id in member["roles"]
-                ),  # Convert to set for fast operations
+                "discord_user_name": user["discord_user_name"],
+                "character_id": user.get("character_id", None),
+                "corporation_id": public_data.get("corporation_id", None),
+                "alliance_id": public_data.get("alliance_id", None),
+                "current_roles": user["current_roles"],
                 "target_roles": set(),
             }
         )
 
     # Determine target roles
-    for user in composite_users:
+    for user in audited_users:
         if user["corporation_id"] == CORP_ID:
             user["target_roles"].add(ROLES["Membro"])
         elif user["alliance_id"] in FRIENDLY_ALLIANCES_IDS:
@@ -87,7 +123,7 @@ def lambda_handler(event, context):
     headers = {"Authorization": f"Bot {BOT_TOKEN}"}
 
     # Process role updates
-    for user in composite_users:
+    for user in audited_users:
         discord_user_id = user["discord_user_id"]
 
         # Add missing roles
@@ -99,7 +135,7 @@ def lambda_handler(event, context):
             )
             response.raise_for_status()
             roles_added.append(
-                f"Role '{get_key_from_value(ROLES, role_id)}' adicionada a {user['character_name']}"
+                f"Role '{get_key_from_value(ROLES, role_id)}' adicionada a '{user['discord_user_name']}'"
             )
 
         # Remove extra roles
@@ -111,23 +147,80 @@ def lambda_handler(event, context):
             )
             response.raise_for_status()
             roles_removed.append(
-                f"Role '{get_key_from_value(ROLES, role_id)}' removida de {user['character_name']}"
+                f"Role '{get_key_from_value(ROLES, role_id)}' removida de '{user['discord_user_name']}'"
             )
 
-    # Identify users who are in the Discord but not registered
-    registered_discord_ids = {user["discord_user_id"] for user in composite_users}
-    all_discord_ids = set(members_map.keys())
-    not_registered_user_ids = list(all_discord_ids - registered_discord_ids)
-
     return {
-        "registered_users": composite_users,
         "roles_added": roles_added,
         "roles_removed": roles_removed,
-        "not_registered_user_ids": not_registered_user_ids,
     }
 
 
-def get_member_list() -> list:
+def dm_unregistered_users(dm_targets: list):
+    headers = {"Authorization": f"Bot {BOT_TOKEN}", "Content-Type": "application/json"}
+
+    # DM only the 5 most recent members without registration
+    dm_targets.sort(key=lambda x: x["joined_at"], reverse=True)
+    dm_targets = dm_targets[:5]
+
+    dm_sent = []
+    for user in dm_targets:
+        response = httpx.post(
+            "https://discord.com/api/v10/users/@me/channels",
+            headers=headers,
+            json={"recipient_id": user["discord_user_id"]},
+        )
+
+        response.raise_for_status()
+        channel_id = response.json()["id"]
+
+        state_token = db.state_token.add(user["discord_user_id"])
+        query_string = urllib.parse.urlencode(
+            {
+                "response_type": "code",
+                "client_id": CLIENT_ID,
+                "redirect_uri": SSO_CALLBACK_URL,
+                "scope": "publicData",
+                "state": state_token,
+            }
+        )
+
+        auth_url = f"https://login.eveonline.com/v2/oauth/authorize?{query_string}"
+
+        content = f"🍻 Seja bem-vindo ao discord das Forças Armadas!\n\nClique no botão abaixo para vincular sua conta do EVE Online e ter acesso aos canais internos."
+        components = [
+            {
+                "type": 1,
+                "components": [
+                    {
+                        "type": 2,
+                        "style": 5,
+                        "label": "Log in with EVE Online",
+                        "url": auth_url,
+                    }
+                ],
+            }
+        ]
+
+        response = httpx.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers=headers,
+            json={
+                "content": content,
+                "components": components,
+            },
+        )
+
+        response.raise_for_status()
+        db.users.add(discord_user_id=user["discord_user_id"])
+        dm_sent.append(
+            f"DM enviada para '{user["discord_user_name"]}' com instruções de registro"
+        )
+
+    return dm_sent
+
+
+def get_discord_members() -> list:
     headers = {"Authorization": f"Bot {BOT_TOKEN}"}
     params = {"limit": 1000}
 
@@ -142,30 +235,21 @@ def get_member_list() -> list:
     return body
 
 
-def get_registered_users() -> list:
-    raw_data = db.users.get_all()
-    return [
-        {
-            "discord_user_id": discord_user_id,
-            "character_id": raw_data[discord_user_id]["character_id"],
-        }
-        for discord_user_id in raw_data.keys()
-    ]
+def get_discord_member_name(member: dict):
+    if member.get("nick"):
+        return member["nick"]
+    return member["user"]["global_name"]
 
 
-@stamina.retry(on=_is_retriable_error, attempts=3)
-def get_public_data(character_id: int) -> dict:
-    response = httpx.get(
-        f"https://esi.evetech.net/v5/characters/{character_id}/", timeout=10
-    )
-    response.raise_for_status()
-    return response.json()
+def get_registered_members() -> list:
+    return db.users.get_all()
 
 
 def get_batch_public_data(character_ids: list[int]) -> list:
     async def fetch_character_data():
         semaphore = asyncio.Semaphore(25)  # Limit to 25 concurrent requests
 
+        @stamina.retry(on=_is_retriable_error, attempts=3)
         async def fetch(character_id):
             async with semaphore:
                 async with httpx.AsyncClient() as client:
