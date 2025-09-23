@@ -6,12 +6,13 @@ import boto3
 from nanoid import generate
 
 AWS_REGION = os.environ.get("AWS_REGION", "")
+FORCINHA_BUCKET = os.environ.get("FORCINHA_BUCKET", "")
 
 dynamo_client = boto3.resource("dynamodb", region_name=AWS_REGION)
 state_token_table = dynamo_client.Table("forcinha_state-token")
 
 s3_client = boto3.resource("s3", region_name=AWS_REGION)
-bucket = s3_client.Bucket("forcinha-bot")
+bucket = s3_client.Bucket(FORCINHA_BUCKET)
 
 
 class state_token:

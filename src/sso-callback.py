@@ -1,23 +1,18 @@
 import base64
 import os
 
-import db
 import httpx
 
+import db
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN", None)
+EVE_CLIENT_ID = os.environ.get("EVE_CLIENT_ID", None)
+EVE_CLIENT_SECRET = os.environ.get("EVE_CLIENT_SECRET", None)
 
-CLIENT_ID = os.environ.get("CLIENT_ID", None)
-CLIENT_SECRET = os.environ.get("CLIENT_SECRET", None)
 
-
-def lambda_handler(event, context):
-    if CLIENT_ID is None or CLIENT_SECRET is None:
+def handler(event, context):
+    if EVE_CLIENT_ID is None or EVE_CLIENT_SECRET is None or BOT_TOKEN is None:
         return {"statusCode": 500, "body": "Internal Server Error"}
-
-    method = event.get("requestContext", {}).get("http", {}).get("method", "")
-
-    if method != "GET":
-        return {"statusCode": 405, "body": "Method Not Allowed"}
 
     query_params = event.get("queryStringParameters", {})
 
@@ -42,7 +37,7 @@ def lambda_handler(event, context):
 
 def request_token(authorization_code: str):
     basic_auth = base64.urlsafe_b64encode(
-        f"{CLIENT_ID}:{CLIENT_SECRET}".encode("utf-8")
+        f"{EVE_CLIENT_ID}:{EVE_CLIENT_SECRET}".encode("utf-8")
     ).decode()
 
     headers = {
@@ -189,7 +184,7 @@ def show_confirmation_page():
 
 
 if __name__ == "__main__":
-    response = lambda_handler(
+    response = handler(
         {
             "requestContext": {"http": {"method": "POST"}},
             "queryStringParameters": {

@@ -1,12 +1,273 @@
+AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
+Description: ForcinhaBot Backend
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Deployment environment (dev or prod)
+  DiscordAppId:
+    Type: String
+    Default: ''
+    Description: Discord Application ID
+    NoEcho: true
+  DiscordPublicKey:
+    Type: String
+    Default: ''
+    Description: Discord Public Key
+    NoEcho: true
+  DiscordBotToken:
+    Type: String
+    Default: ''
+    Description: Discord Bot Token
+    NoEcho: true
+  GuildId:
+    Type: String
+    Default: ''
+    Description: Discord Guild ID
+    NoEcho: true
+  EveClientId:
+    Type: String
+    Default: ''
+    Description: EVE Online Client ID
+    NoEcho: true
+  EveSecretKey:
+    Type: String
+    Default: ''
+    Description: EVE Online Secret Key
+    NoEcho: true
+
+Globals:
+  Function:
+    Environment:
+      Variables:
+        FORCINHA_BUCKET: !Ref Forcinha
+        POLARS_TEMP_DIR: /tmp/polars
+
 Resources:
-  forcinhaDefault:
-    Type: AWS::Serverless::LayerVersion
+  CommandMonolith:
+    Type: AWS::Serverless::Function
     Properties:
-      Description: !Sub
-        - Stack ${AWS::StackName} Layer ${ResourceName}
-        - ResourceName: forcinhaDefault
-      ContentUri: src/layer/
-      RetentionPolicy: Delete
-    Metadata:
-      BuildMethod: python3.13
+      FunctionName: !Sub ${AWS::StackName}_command-monolith
+      Description: !Sub '[${AWS::StackName}] Handle Discord interactions'
+      CodeUri: src/
+      Handler: command-monolith.handler
+      Runtime: python3.13
+      Tracing: Active
+      MemorySize: 512
+      Timeout: 10
+      Environment:
+        Variables:
+          APP_ID: !Ref DiscordAppId
+          PUBLIC_KEY: !Ref DiscordPublicKey
+          FORCINHA_BUCKET: !Ref Forcinha
+          CLIENT_ID: !Ref EveClientId
+          SSO_CALLBACK_URL: !Sub https://${SSOCallback}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/callback
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource:
+                - !Sub ${Forcinha.Arn}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource:
+                - !Sub ${Forcinha.Arn}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: '*'
+      Events:
+        InteractionsPOSTinteractions:
+          Type: Api
+          Properties:
+            Path: /interactions
+            Method: POST
+            RestApiId: !Ref Interactions
+
+  CommandMonolithLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CommandMonolith}
+      RetentionInDays: 14
+
+  HandleSSOCallbackLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${HandleSSOCallback}
+      RetentionInDays: 14
+
+  HandleSSOCallback:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}_sso-callback
+      Description: !Sub '[${AWS::StackName}] Handle EVE Online SSO callback'
+      CodeUri: src/
+      Handler: sso-callback.handler
+      Runtime: python3.13
+      Tracing: Active
+      MemorySize: 512
+      Timeout: 10
+      Environment:
+        Variables:
+          BOT_TOKEN: !Ref DiscordBotToken
+          EVE_CLIENT_ID: !Ref EveClientId
+          EVE_CLIENT_SECRET: !Ref EveSecretKey
+          FORCINHA_BUCKET: !Ref Forcinha
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource:
+                - !Sub ${Forcinha.Arn}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource:
+                - !Sub ${Forcinha.Arn}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: '*'
+      Events:
+        SSOCallbackGETcallback:
+          Type: Api
+          Properties:
+            Path: /callback
+            Method: GET
+            RestApiId: !Ref SSOCallback
+
+  Forcinha:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}
+
+  ForcinhaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Forcinha
+      PolicyDocument:
+        Id: RequireEncryptionInTransit
+        Version: '2012-10-17'
+        Statement:
+          - Principal: '*'
+            Action: '*'
+            Effect: Deny
+            Resource:
+              - !GetAtt Forcinha.Arn
+              - !Sub ${Forcinha.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  SSOCallback:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - '[${AWS::StackName}] ${ResourceName} API'
+        - ResourceName: SSO Callback
+      StageName: !Ref Environment
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /callback:
+            get:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${HandleSSOCallback.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+      Cors:
+        MaxAge: 5
+
+  Interactions:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - '[${AWS::StackName}] ${ResourceName} API'
+        - ResourceName: Interactions
+      StageName: !Ref Environment
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /interactions:
+            post:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommandMonolith.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+      Cors:
+        MaxAge: 5
+        AllowOrigin: '''*'''
+        AllowHeaders: '''x-signature-ed25519, x-signature-timestamp'''
+
+  HandleAudit:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AWS::StackName}_audit
+      Description: !Sub '[${AWS::StackName}] Periodic audit of data'
+      CodeUri: src/
+      Handler: audit.handler
+      Runtime: python3.13
+      Tracing: Active
+      MemorySize: 1024
+      Timeout: 300
+      Environment:
+        Variables:
+          FORCINHA_BUCKET: !Ref Forcinha
+          GUID_ID: !Ref GuildId
+          BOT_TOKEN: !Ref DiscordBotToken
+          EVE_CLIENT_ID: !Ref EveClientId
+          SSO_CALLBACK_URL: !Sub https://${SSOCallback}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/callback
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource:
+                - !Sub ${Forcinha.Arn}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource:
+                - !Sub ${Forcinha.Arn}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+              Resource: '*'
+      Events:
+        ScheduledEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+            Enabled: true

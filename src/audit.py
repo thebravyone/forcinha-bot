@@ -4,14 +4,15 @@ import os
 import urllib
 from datetime import datetime
 
-import db
 import httpx
 import stamina
+
+import db
 
 GUILD_ID = os.environ.get("GUILD_ID", None)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", None)
 
-CLIENT_ID = os.environ.get("CLIENT_ID", None)
+EVE_CLIENT_ID = os.environ.get("CLIENT_ID", None)
 SSO_CALLBACK_URL = os.environ.get("SSO_CALLBACK_URL", None)
 
 CORP_ID = 98028546
@@ -21,6 +22,7 @@ FRIENDLY_ALLIANCES_IDS = [
     1354830081,  # Goonswarm Federation
 ]
 
+# Discord Role IDs
 ROLES = {
     "Membro": 1063973360914145290,
     "Aliado": 1122778799839391895,
@@ -36,7 +38,7 @@ def _is_retriable_error(exc: Exception) -> bool:
     )
 
 
-def lambda_handler(event, context):
+def handler(event, context):
     if GUILD_ID is None or BOT_TOKEN is None:
         return {"statusCode": 500, "body": "Internal Server Error"}
 
@@ -236,7 +238,7 @@ def dm_unregistered_users(dm_targets: list):
         query_string = urllib.parse.urlencode(
             {
                 "response_type": "code",
-                "client_id": CLIENT_ID,
+                "client_id": EVE_CLIENT_ID,
                 "redirect_uri": SSO_CALLBACK_URL,
                 "scope": "publicData",
                 "state": state_token,
@@ -367,5 +369,5 @@ def get_key_from_value(dictionary, target_value):
 
 
 if __name__ == "__main__":
-    print(lambda_handler({}, None))
+    print(handler({}, None))
     pass

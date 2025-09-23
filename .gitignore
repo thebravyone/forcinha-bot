@@ -128,7 +128,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+*.env
 .venv
 env/
 venv/
@@ -179,3 +179,4 @@ cython_debug/
 
 # Dev
 /index.py
+/samconfig.toml

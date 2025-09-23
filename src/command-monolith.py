@@ -2,28 +2,26 @@ import json
 import os
 import urllib.parse
 
-import db
 import httpx
+from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
+
+import db
 
 APP_ID = os.environ.get("APP_ID", None)
 PUBLIC_KEY = os.environ.get("PUBLIC_KEY", None)
-USER_AGENT = os.environ.get("USER_AGENT", None)
+USER_AGENT = "DiscordBot (https://github.com/thebravyone/forcinha-bot, 1.0.0)"
 
 CLIENT_ID = os.environ.get("CLIENT_ID", None)
-SSO_CALLBACK_URL = os.environ.get("CALLBACK_URL", None)
+SSO_CALLBACK_URL = os.environ.get("SSO_CALLBACK_URL", None)
 
 
-def lambda_handler(event, context):
+def handler(event, context):
+
     if not verify_signature(event):
-        return {"statusCode": 401, "body": "Unauthorized"}
+        return {"statusCode": 401, "body": "Invalid request signature"}
 
-    method = event.get("requestContext", {}).get("http", {}).get("method", "")
-
-    if method != "POST":
-        return {"statusCode": 405, "body": "Method Not Allowed"}
-
-    if PUBLIC_KEY is None or USER_AGENT is None or CLIENT_ID is None:
+    if PUBLIC_KEY is None or CLIENT_ID is None:
         return {"statusCode": 500, "body": "Internal Server Error"}
 
     body = json.loads(event.get("body", "{}"))
@@ -155,15 +153,6 @@ def command_audit(command: dict):
             }
         )
 
-    # if len(results["dm_sent"]) > 0:
-    #     embeds.append(
-    #         {
-    #             "title": f"{len(results['dm_sent'])}  DMs enviadas para membros não registrados",
-    #             "description": "\n".join(results["dm_sent"]),
-    #             "color": 0x71717A,
-    #         }
-    #     )
-
     response = httpx.patch(
         f"https://discord.com/api/v10/webhooks/{APP_ID}/{command["token"]}/messages/@original",
         headers={"User-Agent": USER_AGENT},
@@ -187,18 +176,8 @@ def verify_signature(event: dict) -> bool:
         verify_key = VerifyKey(bytes.fromhex(PUBLIC_KEY))
         verify_key.verify(f"{timestamp}{body}".encode(), bytes.fromhex(signature))
         return True
-    except:
+    except BadSignatureError:
         return False
-
-
-def _debug(event: dict) -> bool:
-    secret = event.get("headers", {}).get("x-debug-secret", "")
-    debug_secret = os.environ.get("DEBUG_SECRET", None)
-
-    if debug_secret is None:
-        return False
-
-    return secret == debug_secret
 
 
 def interaction_callback_url(data: dict) -> str:
@@ -218,5 +197,5 @@ def send_message(url: str, content: str, components: dict = {}):
 
 
 if __name__ == "__main__":
-    lambda_handler({}, None)
+    handler({}, None)
     pass
