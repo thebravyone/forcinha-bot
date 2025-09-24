@@ -1,5 +1,4 @@
 import json
-import os
 
 import discord
 import eveonline
@@ -59,7 +58,9 @@ def command_link_account(command: dict):
         },
     ]
 
-    discord.respond_interaction(command, components)
+    discord.Interaction.create_message(
+        original_command=command, components=components, ephemeral=True
+    )
 
     return {"statusCode": 202}
 
@@ -139,24 +140,3 @@ def command_link_account(command: dict):
 #     response.raise_for_status()
 
 #     return {"statusCode": 202}
-
-
-# def interaction_callback_url(data: dict) -> str:
-#     return f"https://discord.com/api/v10/interactions/{data['id']}/{data['token']}/callback"
-
-
-# def send_message(url: str, content: str, components: dict = {}):
-#     httpx.post(
-#         url,
-#         headers={"User-Agent": USER_AGENT},
-#         json={
-#             "type": 4,
-#             "data": {"content": content, "components": components},
-#         },
-#     )
-#     return
-
-
-# if __name__ == "__main__":
-#     handler({}, None)
-#     pass
