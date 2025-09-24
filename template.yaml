@@ -45,6 +45,11 @@ Globals:
   Function:
     Environment:
       Variables:
+        APP_ID: !Ref DiscordAppId
+        PUBLIC_KEY: !Ref DiscordPublicKey
+        BOT_TOKEN: !Ref DiscordBotToken
+        EVE_CLIENT_ID: !Ref EveClientId
+        EVE_CLIENT_SECRET: !Ref EveSecretKey
         FORCINHA_BUCKET: !Ref Forcinha
         POLARS_TEMP_DIR: /tmp/polars
 
@@ -58,14 +63,10 @@ Resources:
       Handler: command-monolith.handler
       Runtime: python3.13
       Tracing: Active
-      MemorySize: 512
+      MemorySize: 1024
       Timeout: 10
       Environment:
         Variables:
-          APP_ID: !Ref DiscordAppId
-          PUBLIC_KEY: !Ref DiscordPublicKey
-          FORCINHA_BUCKET: !Ref Forcinha
-          CLIENT_ID: !Ref EveClientId
           SSO_CALLBACK_URL: !Sub https://${SSOCallback}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/callback
       Policies:
         - Statement:
@@ -271,3 +272,17 @@ Resources:
           Properties:
             Schedule: rate(1 day)
             Enabled: true
+
+  LinkedUsers:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AWS::StackName}_linked-users
+      AttributeDefinitions:
+        - AttributeName: discord_user_id
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: discord_user_id
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
