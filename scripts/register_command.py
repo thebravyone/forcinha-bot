@@ -12,8 +12,8 @@ commands = [
     {
         "name": "vincular",
         "type": 1,
-        "description": "Vincule sua conta do EVE-Online ao Discord",
-        "contexts": [1],  # DM Only
+        "description": "Vincule sua conta do EVE-Online ao seu usuário do Discord",
+        "contexts": [0, 1],
     },
     {
         "name": "auditar",

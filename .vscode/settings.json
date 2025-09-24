@@ -8,5 +8,6 @@
     },
     "terminal.integrated.env.windows": {
         "PYTHONPATH": "${workspaceFolder}\\src\\layer"
-    }
+    },
+    "editor.tabSize": 4
 }
