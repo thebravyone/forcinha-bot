@@ -1,13 +1,12 @@
 {
     "editor.stickyTabStops": true,
     "editor.indentSize": "tabSize",
-
+    "editor.tabSize": 4,
     "python.analysis.extraPaths": ["./src/layer"],
     "terminal.integrated.env.linux": {
         "PYTHONPATH": "${workspaceFolder}/src/layer"
     },
     "terminal.integrated.env.windows": {
         "PYTHONPATH": "${workspaceFolder}\\src\\layer"
-    },
-    "editor.tabSize": 4
+    }
 }

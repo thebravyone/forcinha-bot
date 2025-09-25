@@ -1,0 +1,4 @@
+pynacl==1.5.0
+requests==2.32.5
+nanoid==2.0.0
+aws-xray-sdk==2.14.0
