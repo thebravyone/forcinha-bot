@@ -1,240 +1,242 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: ForcinhaBot Backend
 
 Parameters:
-  Environment:
-    Type: String
-    Default: dev
-    AllowedValues:
-      - dev
-      - prod
-  DiscordAppId:
-    Type: String
-    Default: ''
-    NoEcho: true
-  DiscordPublicKey:
-    Type: String
-    Default: ''
-    NoEcho: true
-  DiscordBotToken:
-    Type: String
-    Default: ''
-    NoEcho: true
-  EveClientId:
-    Type: String
-    Default: ''
-    NoEcho: true
-  EveSecretKey:
-    Type: String
-    Default: ''
-    NoEcho: true
+    Environment:
+        Type: String
+        Default: dev
+        AllowedValues:
+            - dev
+            - prod
+    DiscordAppId:
+        Type: String
+        Default: ""
+        NoEcho: true
+    DiscordPublicKey:
+        Type: String
+        Default: ""
+        NoEcho: true
+    DiscordBotToken:
+        Type: String
+        Default: ""
+        NoEcho: true
+    EveClientId:
+        Type: String
+        Default: ""
+        NoEcho: true
+    EveSecretKey:
+        Type: String
+        Default: ""
+        NoEcho: true
 
 Globals:
-  Function:
-    Environment:
-      Variables:
-        APP_ID: !Ref DiscordAppId
-        PUBLIC_KEY: !Ref DiscordPublicKey
-        BOT_TOKEN: !Ref DiscordBotToken
-        EVE_CLIENT_ID: !Ref EveClientId
-        EVE_CLIENT_SECRET: !Ref EveSecretKey
-        STATETOKENTABLE_TABLE_NAME: !Ref StateTokenTable
-        USERSTABLE_TABLE_NAME: !Ref UsersTable
-        EVEENTITIESMETADATA_TABLE_NAME: !Ref EveEntitiesMetadata
-  Api:
-    OpenApiVersion: 3.0.1
+    Function:
+        Environment:
+            Variables:
+                APP_ID: !Ref DiscordAppId
+                PUBLIC_KEY: !Ref DiscordPublicKey
+                BOT_TOKEN: !Ref DiscordBotToken
+                EVE_CLIENT_ID: !Ref EveClientId
+                EVE_CLIENT_SECRET: !Ref EveSecretKey
+                STATETOKENTABLE_TABLE_NAME: !Ref StateTokenTable
+                USERSTABLE_TABLE_NAME: !Ref UsersTable
+                EVEENTITIESMETADATA_TABLE_NAME: !Ref EveEntitiesMetadata
+    Api:
+        OpenApiVersion: 3.0.1
 
 Resources:
-  CommandMonolithFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${AWS::StackName}_command-monolith
-      Description: !Sub '[${AWS::StackName}] Handle Discord interactions'
-      CodeUri: src/functions
-      Handler: command-monolith.handler
-      Runtime: python3.13
-      Tracing: Active
-      MemorySize: 1024
-      Timeout: 10
-      Environment:
-        Variables:
-          AUDITFUNCTION_FUNCTION_NAME: !Ref AuditFunction
-          AUDITFUNCTION_FUNCTION_ARN: !GetAtt AuditFunction.Arn
-          SSO_CALLBACK_URL: !Sub https://${SSOCallbackEndpoint}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/callback
-      Events:
-        InteractionsEndpointPOSTinteractions:
-          Type: Api
-          Properties:
-            Path: /interactions
-            Method: POST
-            RestApiId: !Ref InteractionsEndpoint
-      Layers:
-        - !Ref LayerShared
-      Policies:
-        - LambdaInvokePolicy:
-            FunctionName: !Ref AuditFunction
-        - DynamoDBCrudPolicy:
-            TableName: !Ref StateTokenTable
+    CommandMonolithFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            FunctionName: !Sub ${AWS::StackName}_command-monolith
+            Description: !Sub "[${AWS::StackName}] Handle Discord interactions"
+            CodeUri: src/functions
+            Handler: command-monolith.handler
+            Runtime: python3.13
+            Tracing: Active
+            MemorySize: 1024
+            Timeout: 10
+            Environment:
+                Variables:
+                    AUDITFUNCTION_FUNCTION_NAME: !Ref AuditFunction
+                    AUDITFUNCTION_FUNCTION_ARN: !GetAtt AuditFunction.Arn
+                    SSO_CALLBACK_URL: !Sub https://${SSOCallbackEndpoint}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/callback
+            Events:
+                InteractionsEndpointPOSTinteractions:
+                    Type: Api
+                    Properties:
+                        Path: /interactions
+                        Method: POST
+                        RestApiId: !Ref InteractionsEndpoint
+            Layers:
+                - !Ref LayerShared
+            Policies:
+                - LambdaInvokePolicy:
+                      FunctionName: !Ref AuditFunction
+                - DynamoDBCrudPolicy:
+                      TableName: !Ref StateTokenTable
 
-  SSOCallbackFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${AWS::StackName}_sso-callback
-      Description: !Sub '[${AWS::StackName}] Handle EVE Online SSO callback'
-      CodeUri: src/functions
-      Handler: sso-callback.handler
-      Runtime: python3.13
-      Tracing: Active
-      MemorySize: 512
-      Timeout: 10
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref StateTokenTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref UsersTable
-        - SQSSendMessagePolicy:
-            QueueName: !GetAtt AuditUser.QueueName
-      Events:
-        SSOCallbackEndpointGETcallback:
-          Type: Api
-          Properties:
-            Path: /callback
-            Method: GET
-            RestApiId: !Ref SSOCallbackEndpoint
-      Layers:
-        - !Ref LayerShared
-      Environment:
-        Variables:
-          AUDITUSER_QUEUE_URL: !Ref AuditUser
+    SSOCallbackFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            FunctionName: !Sub ${AWS::StackName}_sso-callback
+            Description: !Sub "[${AWS::StackName}] Handle EVE Online SSO callback"
+            CodeUri: src/functions
+            Handler: sso-callback.handler
+            Runtime: python3.13
+            Tracing: Active
+            MemorySize: 512
+            Timeout: 10
+            Policies:
+                - DynamoDBCrudPolicy:
+                      TableName: !Ref StateTokenTable
+                - DynamoDBCrudPolicy:
+                      TableName: !Ref UsersTable
+                - SQSSendMessagePolicy:
+                      QueueName: !GetAtt AuditUser.QueueName
+            Events:
+                SSOCallbackEndpointGETcallback:
+                    Type: Api
+                    Properties:
+                        Path: /callback
+                        Method: GET
+                        RestApiId: !Ref SSOCallbackEndpoint
+            Layers:
+                - !Ref LayerShared
+            Environment:
+                Variables:
+                    AUDITUSER_QUEUE_URL: !Ref AuditUser
 
-  AuditFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ${AWS::StackName}_audit
-      Description: !Sub '[${AWS::StackName}] Periodic audit of data'
-      CodeUri: src/functions
-      Handler: audit.handler
-      Runtime: python3.13
-      Tracing: Active
-      MemorySize: 1024
-      Timeout: 60
-      Events:
-        ScheduledEvent:
-          Type: Schedule
-          Properties:
-            Schedule: rate(1 day)
-            Enabled: true
-            Name: AuditTimer
-        AuditUser:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt AuditUser.Arn
-            BatchSize: 1
-      Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref UsersTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref EveEntitiesMetadata
-      Layers:
-        - !Ref LayerShared
+    AuditFunction:
+        Type: AWS::Serverless::Function
+        Properties:
+            FunctionName: !Sub ${AWS::StackName}_audit
+            Description: !Sub "[${AWS::StackName}] Periodic audit of data"
+            CodeUri: src/functions
+            Handler: audit.handler
+            Runtime: python3.13
+            Tracing: Active
+            MemorySize: 1024
+            Timeout: 60
+            Events:
+                ScheduledEvent:
+                    Type: Schedule
+                    Properties:
+                        Schedule: rate(1 day)
+                        Enabled: true
+                        Name: !Sub ${AWS::StackName}_audit-timer
+                AuditUser:
+                    Type: SQS
+                    Properties:
+                        Queue: !GetAtt AuditUser.Arn
+                        BatchSize: 1
+            Policies:
+                - DynamoDBCrudPolicy:
+                      TableName: !Ref UsersTable
+                - DynamoDBCrudPolicy:
+                      TableName: !Ref EveEntitiesMetadata
+            Layers:
+                - !Ref LayerShared
 
-  LayerShared:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      Description: !Sub '[${AWS::StackName}]_shared'
-      ContentUri: src/layer
-      RetentionPolicy: Delete
-    Metadata:
-      BuildMethod: python3.13
+    LayerShared:
+        Type: AWS::Serverless::LayerVersion
+        Properties:
+            LayerName: !Sub ${AWS::StackName}_shared
+            Description: !Sub "[${AWS::StackName}] shared dependencies"
+            ContentUri: src/layer
+            RetentionPolicy: Delete
+        Metadata:
+            BuildMethod: python3.13
 
-  UsersTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub ${AWS::StackName}_users
-      AttributeDefinitions:
-        - AttributeName: discord_user_id
-          AttributeType: S
-      BillingMode: PAY_PER_REQUEST
-      KeySchema:
-        - AttributeName: discord_user_id
-          KeyType: HASH
+    UsersTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            TableName: !Sub ${AWS::StackName}_users
+            AttributeDefinitions:
+                - AttributeName: discord_user_id
+                  AttributeType: S
+            BillingMode: PAY_PER_REQUEST
+            KeySchema:
+                - AttributeName: discord_user_id
+                  KeyType: HASH
 
-  StateTokenTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub ${AWS::StackName}_state-tokens
-      AttributeDefinitions:
-        - AttributeName: state_token
-          AttributeType: S
-      BillingMode: PAY_PER_REQUEST
-      KeySchema:
-        - AttributeName: state_token
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: ttl
-        Enabled: true
+    StateTokenTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            TableName: !Sub ${AWS::StackName}_state-tokens
+            AttributeDefinitions:
+                - AttributeName: state_token
+                  AttributeType: S
+            BillingMode: PAY_PER_REQUEST
+            KeySchema:
+                - AttributeName: state_token
+                  KeyType: HASH
+            TimeToLiveSpecification:
+                AttributeName: ttl
+                Enabled: true
 
-  EveEntitiesMetadata:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub ${AWS::StackName}_eve-entities-metadata
-      AttributeDefinitions:
-        - AttributeName: id
-          AttributeType: S
-      BillingMode: PAY_PER_REQUEST
-      KeySchema:
-        - AttributeName: id
-          KeyType: HASH
+    EveEntitiesMetadata:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            TableName: !Sub ${AWS::StackName}_eve-entities-metadata
+            AttributeDefinitions:
+                - AttributeName: id
+                  AttributeType: S
+            BillingMode: PAY_PER_REQUEST
+            KeySchema:
+                - AttributeName: id
+                  KeyType: HASH
 
-  InteractionsEndpoint:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub '[${AWS::StackName}] Interactions Endpoint'
-      Description: !Sub Receives Discord interactions for ${AWS::StackName}
-      StageName: !Ref Environment
-      DefinitionBody:
-        openapi: '3.0'
-        info: {}
-        paths:
-          /interactions:
-            post:
-              x-amazon-apigateway-integration:
-                httpMethod: POST
-                type: aws_proxy
-                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommandMonolithFunction.Arn}/invocations
-              responses: {}
-      EndpointConfiguration: REGIONAL
-      TracingEnabled: true
-      Cors:
-        MaxAge: 5
-        AllowOrigin: '''*'''
-        AllowHeaders: '''x-signature-ed25519, x-signature-timestamp'''
+    InteractionsEndpoint:
+        Type: AWS::Serverless::Api
+        Properties:
+            Name: !Sub "[${AWS::StackName}] Interactions Endpoint"
+            Description: !Sub Receives Discord interactions for ${AWS::StackName}
+            StageName: !Ref Environment
+            DefinitionBody:
+                openapi: "3.0"
+                info: {}
+                paths:
+                    /interactions:
+                        post:
+                            x-amazon-apigateway-integration:
+                                httpMethod: POST
+                                type: aws_proxy
+                                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CommandMonolithFunction.Arn}/invocations
+                            responses: {}
+            EndpointConfiguration: REGIONAL
+            TracingEnabled: true
+            Cors:
+                MaxAge: 5
+                AllowOrigin: "'*'"
+                AllowHeaders: "'x-signature-ed25519, x-signature-timestamp'"
 
-  SSOCallbackEndpoint:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: !Sub '[${AWS::StackName}] SSO Callback Endpoint'
-      Description: !Sub Receives EVE Online SSO callbacks for ${AWS::StackName}
-      StageName: !Ref Environment
-      DefinitionBody:
-        openapi: '3.0'
-        info: {}
-        paths:
-          /callback:
-            get:
-              x-amazon-apigateway-integration:
-                httpMethod: POST
-                type: aws_proxy
-                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SSOCallbackFunction.Arn}/invocations
-              responses: {}
-      EndpointConfiguration: REGIONAL
-      TracingEnabled: true
-      Cors:
-        MaxAge: 5
+    SSOCallbackEndpoint:
+        Type: AWS::Serverless::Api
+        Properties:
+            Name: !Sub "[${AWS::StackName}] SSO Callback Endpoint"
+            Description: !Sub Receives EVE Online SSO callbacks for ${AWS::StackName}
+            StageName: !Ref Environment
+            DefinitionBody:
+                openapi: "3.0"
+                info: {}
+                paths:
+                    /callback:
+                        get:
+                            x-amazon-apigateway-integration:
+                                httpMethod: POST
+                                type: aws_proxy
+                                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SSOCallbackFunction.Arn}/invocations
+                            responses: {}
+            EndpointConfiguration: REGIONAL
+            TracingEnabled: true
+            Cors:
+                MaxAge: 5
 
-  AuditUser:
-    Type: AWS::SQS::Queue
-    Properties:
-      MessageRetentionPeriod: 345600
-      VisibilityTimeout: 1800
+    AuditUser:
+        Type: AWS::SQS::Queue
+        Properties:
+            QueueName: !Sub ${AWS::StackName}_audit-user
+            MessageRetentionPeriod: 345600
+            VisibilityTimeout: 1800
