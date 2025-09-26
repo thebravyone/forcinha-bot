@@ -125,7 +125,7 @@ Resources:
                     Properties:
                         Schedule: rate(1 day)
                         Enabled: true
-                        Name: !Sub ${AWS::StackName}_audit-timer
+                        Name: !Sub ${AWS::StackName}_audit-schedule
                 AuditUser:
                     Type: SQS
                     Properties:

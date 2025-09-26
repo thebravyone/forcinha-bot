@@ -4,15 +4,44 @@ from string import Template
 import db
 import discord
 import eveonline
-
-# from aws_xray_sdk.core import patch_all
+from aws_xray_sdk.core import patch_all
 from requests.exceptions import HTTPError
 
-# patch_all()
+patch_all()
 
 GUILD_POLICIES = {
-    "Forcinha Test Server": {
-        "guild_id": 1346269756256288960,
+    # "Forcinha Test Server": {
+    #     "guild_id": 1346269756256288960,
+    #     "nicknames": {
+    #         "default": {
+    #             "template": Template("[$corporation_ticker] $character_name"),
+    #         },
+    #         "rules": {
+    #             "FORCA": {
+    #                 "corporations": [98028546],
+    #                 "template": Template("$character_name"),
+    #             },
+    #         },
+    #     },
+    #     "roles": {
+    #         "Membro": {
+    #             "role_id": 1346269819393282150,
+    #             "corporations": [98028546],  # FORCA
+    #             "alliances": [],
+    #         },
+    #         "Aliado": {
+    #             "role_id": 1346584727850713200,
+    #             "corporations": [],
+    #             "alliances": [
+    #                 99003214,  # Brave Collective
+    #                 99010079,  # Brave United
+    #                 1354830081,  # Goonswarm Federation
+    #             ],
+    #         },
+    #     },
+    # },
+    "FORCAS ARMADAS": {
+        "guild_id": 189083933659365376,
         "nicknames": {
             "default": {
                 "template": Template("[$corporation_ticker] $character_name"),
@@ -26,12 +55,12 @@ GUILD_POLICIES = {
         },
         "roles": {
             "Membro": {
-                "role_id": 1346269819393282150,
+                "role_id": 1063973360914145290,
                 "corporations": [98028546],  # FORCA
                 "alliances": [],
             },
             "Aliado": {
-                "role_id": 1346584727850713200,
+                "role_id": 1122778799839391895,
                 "corporations": [],
                 "alliances": [
                     99003214,  # Brave Collective
@@ -40,8 +69,10 @@ GUILD_POLICIES = {
                 ],
             },
         },
-    }
+    },
 }
+
+GRAVEYARD_CORP_ID = 1000001  # The internal corporation used for characters in graveyard
 
 
 def handler(event, context):
@@ -311,6 +342,8 @@ def get_characters_data(character_ids: list[int]) -> dict[int, dict]:
                 }
                 for aff in affiliations
                 if aff["character_id"] == character_id
+                and aff["corporation_id"]
+                != GRAVEYARD_CORP_ID  # TODO create alert for it
             ),
             None,
         )
@@ -324,8 +357,14 @@ def get_corporation_ticker(corporation_id: int) -> str:
     if metadata:
         return metadata["data"].get("ticker", "")
 
-    corporation_data = eveonline.Corporation.get_corporation_data(corporation_id)
-    ticker = corporation_data.get("ticker", "")
+    try:
+        corporation_data = eveonline.Corporation.get_corporation_data(corporation_id)
+        ticker = corporation_data.get("ticker", "")
+    except HTTPError as exc:
+        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+            ticker = "Deleted Corporation"
+        else:
+            raise
 
     db.EntityMetadata.upsert(
         id=corporation_id,
@@ -344,8 +383,14 @@ def get_character_name(character_id: int) -> str:
     if metadata:
         return metadata["data"].get("character_name", "")
 
-    character_data = eveonline.Character.get_character_data(character_id)
-    name = character_data.get("name", "")
+    try:
+        character_data = eveonline.Character.get_character_data(character_id)
+        name = character_data.get("name", "")
+    except HTTPError as exc:
+        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+            name = "Deleted Character"
+        else:
+            raise
 
     db.EntityMetadata.upsert(
         id=character_id,
