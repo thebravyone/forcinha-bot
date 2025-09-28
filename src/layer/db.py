@@ -73,7 +73,20 @@ class EntityMetadata:
     @staticmethod
     def get(id: int) -> dict:
         response = entities_metadata_table.get_item(Key={"id": str(id)})
-        return response.get("Item", None)
+        return response.get("Item", None).get("data", None)
+
+    @staticmethod
+    def get_batch(ids: list[int]) -> dict[int, dict]:
+        keys = [{"id": str(id)} for id in ids]
+        response = dynamo.batch_get_item(
+            RequestItems={
+                EVEENTITIESMETADATA_TABLE_NAME: {
+                    "Keys": keys,
+                }
+            }
+        )
+        items = response.get("Responses", {}).get(EVEENTITIESMETADATA_TABLE_NAME, [])
+        return {int(item["id"]): item["data"] for item in items}
 
     @staticmethod
     def upsert(id: int, data: dict) -> None:
@@ -85,23 +98,3 @@ class EntityMetadata:
 
         entities_metadata_table.put_item(Item=item)
         return
-
-
-# class users:
-#     def get_all():
-#         body = bucket.Object(f"users.json").get()["Body"].read()
-#         return json.loads(body)
-
-#     def get(discord_user_id):
-#         user_data = users.get_all()
-#         return user_data.get(str(discord_user_id), None)
-
-#     def add(discord_user_id, character_id=None):
-#         user_data = users.get_all()
-#         user_data[str(discord_user_id)] = {
-#             "character_id": character_id,
-#             "updated_at": datetime.now().isoformat(),
-#         }
-
-#         bucket.Object(f"users.json").put(Body=json.dumps(user_data))
-#         return

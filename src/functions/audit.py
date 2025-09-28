@@ -321,17 +321,12 @@ def get_characters_data(character_ids: list[int]) -> dict[int, dict]:
 
     corporation_ids = list(set([char["corporation_id"] for char in affiliations]))
 
-    character_names = {
-        char_id: get_character_name(char_id) for char_id in character_ids
-    }
-
-    corporation_tickers = {
-        corp_id: get_corporation_ticker(corp_id) for corp_id in corporation_ids
-    }
+    character_names = get_character_names(character_ids)
+    corporation_tickers = get_corporation_tickers(corporation_ids)
 
     character_data = {}
     for character_id in character_ids:
-        character_data[character_id] = next(
+        character_data[int(character_id)] = next(
             (
                 {
                     **aff,
@@ -351,56 +346,68 @@ def get_characters_data(character_ids: list[int]) -> dict[int, dict]:
     return character_data
 
 
-def get_corporation_ticker(corporation_id: int) -> str:
+def get_corporation_tickers(corporation_ids: list[int]) -> dict[int, str]:
 
-    metadata = db.EntityMetadata.get(corporation_id)
-    if metadata:
-        return metadata["data"].get("ticker", "")
+    metadata = db.EntityMetadata.get_batch(corporation_ids)
+    missing_ids = set(corporation_ids) - set(metadata.keys())
 
-    try:
-        corporation_data = eveonline.Corporation.get_corporation_data(corporation_id)
-        ticker = corporation_data.get("ticker", "")
-    except HTTPError as exc:
-        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
-            ticker = "Deleted Corporation"
-        else:
-            raise
+    # remap to only ticker
+    metadata = {corp_id: data.get("ticker", "") for corp_id, data in metadata.items()}
 
-    db.EntityMetadata.upsert(
-        id=corporation_id,
-        data={
-            "ticker": ticker,
-            "corporation_name": corporation_data.get("name", ""),
-        },
-    )
+    if missing_ids:
+        for corporation_id in missing_ids:
+            try:
+                corporation_data = eveonline.Corporation.get_corporation_data(
+                    corporation_id
+                )
+                ticker = corporation_data.get("ticker", "")
+            except HTTPError as exc:
+                if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+                    ticker = "Deleted Corporation"
+                else:
+                    raise
 
-    return ticker
+            db.EntityMetadata.upsert(
+                id=corporation_id,
+                data={
+                    "ticker": ticker,
+                    "corporation_name": corporation_data.get("name", ""),
+                },
+            )
 
+            metadata[corporation_id] = ticker
 
-def get_character_name(character_id: int) -> str:
-
-    metadata = db.EntityMetadata.get(character_id)
-    if metadata:
-        return metadata["data"].get("character_name", "")
-
-    try:
-        character_data = eveonline.Character.get_character_data(character_id)
-        name = character_data.get("name", "")
-    except HTTPError as exc:
-        if getattr(getattr(exc, "response", None), "status_code", None) == 404:
-            name = "Deleted Character"
-        else:
-            raise
-
-    db.EntityMetadata.upsert(
-        id=character_id,
-        data={
-            "character_name": name,
-        },
-    )
-
-    return name
+    return metadata
 
 
-if __name__ == "__main__":
-    handler({}, {})
+def get_character_names(character_ids: list[int]) -> dict[int, str]:
+
+    metadata = db.EntityMetadata.get_batch(character_ids)
+    missing_ids = set(character_ids) - set(metadata.keys())
+
+    # remap to only name
+    metadata = {
+        char_id: data.get("character_name", "") for char_id, data in metadata.items()
+    }
+
+    if missing_ids:
+        for character_id in missing_ids:
+            try:
+                character_data = eveonline.Character.get_character_data(character_id)
+                character_name = character_data.get("name", "")
+            except HTTPError as exc:
+                if getattr(getattr(exc, "response", None), "status_code", None) == 404:
+                    character_name = "Deleted Character"
+                else:
+                    raise
+
+            db.EntityMetadata.upsert(
+                id=character_id,
+                data={
+                    "character_name": character_name,
+                },
+            )
+
+            metadata[character_id] = character_name
+
+    return metadata
