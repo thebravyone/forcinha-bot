@@ -2,11 +2,14 @@
     "editor.stickyTabStops": true,
     "editor.indentSize": "tabSize",
     "editor.tabSize": 4,
-    "python.analysis.extraPaths": ["./src/layer"],
+    "python.analysis.extraPaths": [
+        "./src/layers/shared",
+        "./src/layers/ingest_compute"
+    ],
     "terminal.integrated.env.linux": {
-        "PYTHONPATH": "${workspaceFolder}/src/layer"
+        "PYTHONPATH": "${workspaceFolder}/src/layers/shared:${workspaceFolder}/src/layers/ingest_compute"
     },
     "terminal.integrated.env.windows": {
-        "PYTHONPATH": "${workspaceFolder}\\src\\layer"
+        "PYTHONPATH": "${workspaceFolder}\\src\\layers\\shared;${workspaceFolder}\\src\\layers\\ingest_compute"
     }
 }
