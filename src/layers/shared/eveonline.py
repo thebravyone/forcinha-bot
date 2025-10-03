@@ -98,3 +98,15 @@ class Corporation:
 
         response.raise_for_status()
         return response.json()
+
+
+class Universe:
+    @staticmethod
+    def get_type_data(type_id: int) -> dict:
+        response = requests.get(
+            f"https://esi.evetech.net/universe/types/{int(type_id)}",
+            headers={"X-Compatibility-Date": COMPATIBILITY_DATE},
+        )
+
+        response.raise_for_status()
+        return response.json()
