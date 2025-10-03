@@ -73,7 +73,7 @@ class EntityMetadata:
     @staticmethod
     def get(id: int) -> dict:
         response = entities_metadata_table.get_item(Key={"id": str(id)})
-        return response.get("Item", None).get("data", None)
+        return response.get("Item", {}).get("data", None)
 
     @staticmethod
     def get_batch(ids: list[int]) -> dict[int, dict]:
