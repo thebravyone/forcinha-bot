@@ -141,3 +141,25 @@ class Interaction:
         )
         response.raise_for_status()
         return
+
+
+class Message:
+    @staticmethod
+    def create_message(
+        channel_id: int,
+        components: list[dict] | None = None,
+    ):
+        response = requests.post(
+            f"https://discord.com/api/v10/channels/{channel_id}/messages",
+            headers={
+                "User-Agent": USER_AGENT,
+                "Authorization": f"Bot {BOT_TOKEN}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "flags": FLAG_COMPONENTS_V2,
+                "components": components or [],
+            },
+        )
+        response.raise_for_status()
+        return response.json()
