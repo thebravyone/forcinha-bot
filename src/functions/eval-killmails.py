@@ -158,6 +158,19 @@ def announce_monthly_hero_tackler():
     ]
 
     if hero_tackler_top3:
+
+        fill_count = 3 - len(hero_tackler_top3)
+        if fill_count > 0:
+            hero_tackler_top3 += [
+                {
+                    "attacker_character_id": 0,
+                    "attacker_character_name": "------",
+                    "main_ship_type_id": 0,
+                    "main_ship_type_name": "------",
+                    "total_kill_count": 0,
+                }
+            ] * fill_count
+
         components = [
             {
                 "type": 9,  # section
