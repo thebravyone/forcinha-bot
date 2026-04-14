@@ -306,11 +306,11 @@ Resources:
                 Version: "2012-10-17"
                 Statement:
                     - Principal: "*"
-                      Action: "*"
+                      Action: "s3:*"
                       Effect: Deny
                       Resource:
                           - !GetAtt Datalake.Arn
                           - !Sub ${Datalake.Arn}/*
                       Condition:
                           Bool:
-                              aws:SecureTransport: "false"
+                              aws:SecureTransport: false
