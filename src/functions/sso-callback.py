@@ -20,19 +20,33 @@ def handler(event, context):
     authorization_code = query_params.get("code", None)
     state = query_params.get("state", None)
 
+    # SSO token validation
     try:
         access_token = eveonline.Auth.request_token(authorization_code)["access_token"]
-        character_id = eveonline.Auth.verify_token(access_token)["CharacterID"]
+        character_id = eveonline.Auth.claim_character_id_from_token(access_token)
+    except Exception as e:
+        print(f"Error Fetching access token: {e}")
+        return show_error_page()
 
+    # Link Discord User ID with EVE Character ID
+    try:
         state_data = db.StateToken.get(state)
+
+        if (
+            state_data["discord_user_id"] is None
+            or state_data["interaction_token"] is None
+        ):
+            raise Exception("State token is not valid or has expired")
 
         discord_user_id = state_data["discord_user_id"]
         interaction_token = state_data["interaction_token"]
 
         db.User.upsert(discord_user_id, character_id)
-    except Exception:
+    except Exception as e:
+        print(f"Internal Error: {e}")
         return show_error_page()
 
+    # Queue for audit
     sqs.send_message(
         QueueUrl=QUEUE_URL,
         MessageBody=json.dumps(
