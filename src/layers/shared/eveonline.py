@@ -1,7 +1,6 @@
 import base64
 import os
 import re
-import time
 import urllib.parse
 
 import jwt
@@ -10,7 +9,6 @@ import requests
 COMPATIBILITY_DATE = "2026-04-10"
 
 METADATA_URL = "https://login.eveonline.com/.well-known/oauth-authorization-server"
-METADATA_CACHE_TIME = 300  # 5 minutes
 ACCEPTED_ISSUERS = ("logineveonline.com", "https://login.eveonline.com")
 EXPECTED_AUDIENCE = "EVE Online"
 
